@@ -1,0 +1,430 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>محلل PLS-PM المتقدم</title>
+    <style>
+        body {
+            font-family: 'Arial', sans-serif;
+            margin: 0;
+            padding: 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            padding: 30px;
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+        }
+        .header {
+            text-align: center;
+            color: #2c3e50;
+            margin-bottom: 40px;
+        }
+        .header h1 {
+            font-size: 2.5rem;
+            margin-bottom: 10px;
+        }
+        .section {
+            background: #f8f9fa;
+            padding: 20px;
+            margin: 20px 0;
+            border-radius: 10px;
+            border-right: 5px solid #3498db;
+        }
+        .results {
+            background: #ecf0f1;
+            padding: 15px;
+            border-radius: 8px;
+            margin: 10px 0;
+            font-family: monospace;
+            white-space: pre-wrap;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+        button {
+            background: #3498db;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            margin: 10px 5px;
+            transition: background 0.3s;
+        }
+        button:hover {
+            background: #2980b9;
+        }
+        .input-group {
+            margin: 15px 0;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+            color: #2c3e50;
+        }
+        textarea, input {
+            width: 100%;
+            padding: 10px;
+            border: 2px solid #bdc3c7;
+            border-radius: 5px;
+            font-size: 14px;
+        }
+        .matrix-input {
+            display: grid;
+            gap: 5px;
+            margin: 10px 0;
+        }
+        .matrix-row {
+            display: flex;
+            gap: 5px;
+        }
+        .matrix-cell {
+            flex: 1;
+            padding: 8px;
+            border: 1px solid #bdc3c7;
+            border-radius: 3px;
+            text-align: center;
+        }
+        .loading {
+            display: none;
+            color: #e74c3c;
+            font-weight: bold;
+            text-align: center;
+            padding: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🔄 محلل نمذجة المعادلات الهيكلية PLS-PM</h1>
+            <p>أدخل بياناتك لحساب مقاييس النموذج الهيكلي المتقدم</p>
+        </div>
+
+        <div id="loadingMessage" class="loading">⏳ جاري تحميل المكتبات... يرجى الانتظار</div>
+
+        <div class="section">
+            <h3>📊 إدخال البيانات</h3>
+            <div class="input-group">
+                <label for="dataInput">البيانات (CSV format - صفوف = عينات، أعمدة = متغيرات):</label>
+                <textarea id="dataInput" rows="6" placeholder="أدخل البيانات بصيغة CSV...">1,2,3,4,5
+2,3,4,5,6
+3,4,5,6,7
+4,5,6,7,8</textarea>
+            </div>
+
+            <div class="input-group">
+                <label>مصفوفة المسار البنائي (3x3 مثال):</label>
+                <div class="matrix-input" id="pathMatrix">
+                    <div class="matrix-row">
+                        <input type="number" class="matrix-cell" value="0" min="0" max="1">
+                        <input type="number" class="matrix-cell" value="1" min="0" max="1">
+                        <input type="number" class="matrix-cell" value="0" min="0" max="1">
+                    </div>
+                    <div class="matrix-row">
+                        <input type="number" class="matrix-cell" value="0" min="0" max="1">
+                        <input type="number" class="matrix-cell" value="0" min="0" max="1">
+                        <input type="number" class="matrix-cell" value="1" min="0" max="1">
+                    </div>
+                    <div class="matrix-row">
+                        <input type="number" class="matrix-cell" value="0" min="0" max="1">
+                        <input type="number" class="matrix-cell" value="0" min="0" max="1">
+                        <input type="number" class="matrix-cell" value="0" min="0" max="1">
+                    </div>
+                </div>
+            </div>
+
+            <div class="input-group">
+                <label for="blocksInput">الكتل (تحديد المؤشرات لكل متغير كامن):</label>
+                <input type="text" id="blocksInput" value="0,1|2,3|4" placeholder="مثال: 0,1|2,3|4">
+            </div>
+
+            <div class="input-group">
+                <label for="modesInput">أنماط القياس (A للانعكاسي, B للتكويني):</label>
+                <input type="text" id="modesInput" value="A,A,A" placeholder="مثال: A,A,A">
+            </div>
+
+            <button onclick="analyzeData()" id="analyzeBtn">🚀 تحليل البيانات</button>
+            <button onclick="loadExample()">📋 تحميل مثال</button>
+            <button onclick="clearData()">🗑️ مسح البيانات</button>
+        </div>
+
+        <div id="resultsSection" class="section" style="display: none;">
+            <h3>📈 نتائج التحليل</h3>
+
+            <div class="subsection">
+                <h4>معاملات المسار البنائي</h4>
+                <div id="pathResults" class="results"></div>
+            </div>
+
+            <div class="subsection">
+                <h4>مقاييس الموثوقية والصدق</h4>
+                <div id="metricsResults" class="results"></div>
+            </div>
+
+            <div class="subsection">
+                <h4>مصفوفة HTMT</h4>
+                <div id="htmtResults" class="results"></div>
+            </div>
+
+            <div class="subsection">
+                <h4>مصفوفة فورنل-لاركر</h4>
+                <div id="flResults" class="results"></div>
+            </div>
+
+            <div class="subsection">
+                <h4>إحصائيات النموذج</h4>
+                <div id="statsResults" class="results"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- تضمين الملفات JavaScript -->
+    <script src="metrics.js"></script>
+    <script src="plspm.js"></script>
+
+    <script>
+        // التحقق من تحميل المكتبات
+        function checkLibrariesLoaded() {
+            if (typeof PLSPM === 'undefined' || typeof Metrics === 'undefined') {
+                document.getElementById('loadingMessage').style.display = 'block';
+                document.getElementById('analyzeBtn').disabled = true;
+
+                setTimeout(() => {
+                    if (typeof PLSPM === 'undefined' || typeof Metrics === 'undefined') {
+                        document.getElementById('loadingMessage').innerHTML =
+                            '❌ خطأ في تحميل المكتبات. تأكد من وجود الملفات: metrics.js و plspm.js في نفس المجلد';
+                    } else {
+                        document.getElementById('loadingMessage').style.display = 'none';
+                        document.getElementById('analyzeBtn').disabled = false;
+                    }
+                }, 2000);
+            } else {
+                document.getElementById('loadingMessage').style.display = 'none';
+                document.getElementById('analyzeBtn').disabled = false;
+            }
+        }
+
+        function parseCSV(csvText) {
+            const lines = csvText.trim().split('\n');
+            const data = [];
+
+            for (let line of lines) {
+                const numbers = line.split(',').map(num => {
+                    const parsed = parseFloat(num.trim());
+                    return isNaN(parsed) ? 0 : parsed;
+                });
+
+                if (numbers.length > 0 && !numbers.every(val => val === 0)) {
+                    data.push(numbers);
+                }
+            }
+
+            return data;
+        }
+
+        function getPathMatrix() {
+            const inputs = document.querySelectorAll('#pathMatrix input');
+            const size = 3; //因为我们有 3x3 matrix
+            const matrix = [];
+
+            for (let i = 0; i < size; i++) {
+                const row = [];
+                for (let j = 0; j < size; j++) {
+                    const value = parseInt(inputs[i * size + j].value);
+                    row.push(isNaN(value) ? 0 : value);
+                }
+                matrix.push(row);
+            }
+            return matrix;
+        }
+
+        function getBlocks() {
+            const blocksText = document.getElementById('blocksInput').value;
+            if (!blocksText) return [[0,1], [2,3], [4]];
+
+            return blocksText.split('|').map(block =>
+                block.split(',').map(num => {
+                    const parsed = parseInt(num.trim());
+                    return isNaN(parsed) ? 0 : parsed;
+                }).filter(num => !isNaN(num))
+            );
+        }
+
+        function getModes() {
+            const modesText = document.getElementById('modesInput').value;
+            return modesText ? modesText.split(',') : ['A', 'A', 'A'];
+        }
+
+        function analyzeData() {
+            try {
+                // التحقق النهائي من تحميل المكتبات
+                if (typeof PLSPM === 'undefined') {
+                    throw new Error('مكتبة PLSPM غير محملة. تأكد من وجود ملف plspm.js');
+                }
+                if (typeof Metrics === 'undefined') {
+                    throw new Error('مكتبة Metrics غير محملة. تأكد من وجود ملف metrics.js');
+                }
+
+                const csvText = document.getElementById('dataInput').value;
+                if (!csvText) {
+                    alert('⚠️ يرجى إدخال البيانات أولاً');
+                    return;
+                }
+
+                const data = parseCSV(csvText);
+                const pathMatrix = getPathMatrix();
+                const blocks = getBlocks();
+                const modes = getModes();
+
+                console.log('البيانات المدخلة:', data);
+                console.log('مصفوفة المسار:', pathMatrix);
+                console.log('الكتل:', blocks);
+                console.log('الأنماط:', modes);
+
+                // التحقق من صحة البيانات
+                if (data.length === 0) {
+                    alert('❌ البيانات غير صالحة');
+                    return;
+                }
+
+                if (blocks.length !== pathMatrix.length) {
+                    alert(`❌ عدد الكتل (${blocks.length}) لا يتطابق مع حجم مصفوفة المسار (${pathMatrix.length})`);
+                    return;
+                }
+
+                // إظهار رسالة تحميل
+                document.getElementById('loadingMessage').style.display = 'block';
+                document.getElementById('loadingMessage').innerHTML = '⏳ جاري تحليل البيانات...';
+
+                // استخدام setTimeout لإعطاء فرصة للمتصفح لتحديث الواجهة
+                setTimeout(() => {
+                    try {
+                        // إنشاء وتدريب النموذج
+                        const model = new PLSPM(100, 1e-6, true, false);
+                        model.fit(data, pathMatrix, blocks, modes);
+
+                        // إخفاء رسالة التحميل
+                        document.getElementById('loadingMessage').style.display = 'none';
+
+                        // عرض النتائج
+                        displayResults(model);
+                        document.getElementById('resultsSection').style.display = 'block';
+
+                    } catch (fitError) {
+                        document.getElementById('loadingMessage').style.display = 'none';
+                        alert('❌ خطأ في تركيب النموذج: ' + fitError.message);
+                        console.error(fitError);
+                    }
+                }, 100);
+
+            } catch (error) {
+                document.getElementById('loadingMessage').style.display = 'none';
+                alert('❌ خطأ في التحليل: ' + error.message);
+                console.error(error);
+            }
+        }
+
+        function displayResults(model) {
+            // معاملات المسار
+            if (model.pathCoef) {
+                document.getElementById('pathResults').innerHTML =
+                    model.pathCoef.map((row, i) =>
+                        `المتغير ${i+1}: [${row.map(val => val.toFixed(4)).join(', ')}]`
+                    ).join('\n');
+            }
+
+            // المقاييس
+            let metricsHTML = '';
+            if (model.ave) {
+                metricsHTML += `متوسط التباين المستخرج (AVE): [${model.ave.map(v => v.toFixed(4)).join(', ')}]\n`;
+            }
+            if (model.cr) {
+                metricsHTML += `معامل الموثوقية (CR): [${model.cr.map(v => v.toFixed(4)).join(', ')}]\n`;
+            }
+            if (model.alpha) {
+                metricsHTML += `كرونباخ ألفا: [${model.alpha.map(v => v.toFixed(4)).join(', ')}]\n`;
+            }
+            if (model.rhoA) {
+                metricsHTML += `رو A: [${model.rhoA.map(v => v.toFixed(4)).join(', ')}]\n`;
+            }
+
+            document.getElementById('metricsResults').innerHTML = metricsHTML || 'لا توجد بيانات';
+
+            // مصفوفة HTMT
+            if (model.htmt && Array.isArray(model.htmt)) {
+                document.getElementById('htmtResults').innerHTML =
+                    model.htmt.map(row =>
+                        `[${row.map(val => val.toFixed(4)).join(', ')}]`
+                    ).join('\n');
+            } else {
+                document.getElementById('htmtResults').innerHTML = 'لا توجد بيانات';
+            }
+
+            // مصفوفة فورنل-لاركر
+            if (model.fornellLarcker && Array.isArray(model.fornellLarcker)) {
+                document.getElementById('flResults').innerHTML =
+                    model.fornellLarcker.map(row =>
+                        `[${row.map(val => val.toFixed(4)).join(', ')}]`
+                    ).join('\n');
+            } else {
+                document.getElementById('flResults').innerHTML = 'لا توجد بيانات';
+            }
+
+            // إحصائيات النموذج
+            let statsHTML = '';
+            if (model.pathR2) {
+                statsHTML += `قيم R²: [${model.pathR2.map(v => v.toFixed(4)).join(', ')}]\n`;
+            }
+            if (model.gof !== undefined) {
+                statsHTML += `مؤشر جودة التوفيق (GOF): ${model.gof.toFixed(4)}\n`;
+            }
+            if (model.loadings) {
+                statsHTML += `الأحمال: [${model.loadings.map(v => v.toFixed(4)).join(', ')}]\n`;
+            }
+
+            document.getElementById('statsResults').innerHTML = statsHTML || 'لا توجد بيانات';
+        }
+
+        function loadExample() {
+            document.getElementById('dataInput').value =
+`1,2,3,4,5
+2,3,4,5,6
+3,4,5,6,7
+4,5,6,7,8
+1,2,3,4,5
+2,3,4,5,6`;
+
+            document.getElementById('blocksInput').value = '0,1|2,3|4';
+            document.getElementById('modesInput').value = 'A,A,A';
+        }
+
+        function clearData() {
+            document.getElementById('dataInput').value = '';
+            document.getElementById('blocksInput').value = '';
+            document.getElementById('modesInput').value = '';
+
+            const inputs = document.querySelectorAll('#pathMatrix input');
+            inputs.forEach(input => input.value = '0');
+
+            document.getElementById('resultsSection').style.display = 'none';
+        }
+
+        // عند تحميل الصفحة
+        window.onload = function() {
+            checkLibrariesLoaded();
+            loadExample();
+
+            // إعادة التحقق بعد ثانية
+            setTimeout(checkLibrariesLoaded, 1000);
+        };
+    </script>
+</body>
+</html>
